@@ -1,0 +1,90 @@
+name: Build Workflow
+
+on: [push, pull_request]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: Install Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: '3.8'
+          architecture: 'x64'
+      - name: Print Versions
+        run: |
+          python --version
+          pip --version
+      - name: Install requirements
+        run: |
+          pip install pyserial PyQt5
+          pip install pip install https://github.com/pyqtgraph/pyqtgraph/archive/develop.zip
+          pip install pip install https://github.com/pyinstaller/pyinstaller/archive/develop.zip
+      - name: Run PyInstaller
+        run: |
+          python -m PyInstaller -F -w -n power-profiler-x64 power_profiler/power_profiler.py
+      - name: See dist directory
+        run: ls dist
+      - uses: actions/upload-artifact@master
+        with:
+          name: Windows
+          path: dist/power-profiler-x64.exe
+  build-windows-x86:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: Install Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: '3.8'
+          architecture: 'x86'
+      - name: Print Versions
+        run: |
+          python --version
+          pip --version
+      - name: Install requirements
+        run: |
+          pip install pyserial PyQt5
+          pip install pip install https://github.com/pyqtgraph/pyqtgraph/archive/develop.zip
+          pip install pip install https://github.com/pyinstaller/pyinstaller/archive/develop.zip
+      - name: Run PyInstaller
+        run: |
+          python -m PyInstaller -F -w -n power-profiler-x86 power_profiler/power_profiler.py
+      - name: See dist directory
+        run: ls dist
+      - uses: actions/upload-artifact@master
+        with:
+          name: Windows-x86
+          path: dist/power-profiler-x86.exe
+
+
+  build-macos:
+    runs-on: macOS-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: Install Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: '3.8'
+      - name: Print Versions
+        run: |
+          python --version
+          pip --version
+      - name: Install requirements
+        run: |
+          pip install pyserial PyQt5
+          pip install pip install https://github.com/pyqtgraph/pyqtgraph/archive/develop.zip
+          pip install pip install https://github.com/pyinstaller/pyinstaller/archive/develop.zip
+      - name: Run PyInstaller
+        run: |
+          python -m PyInstaller -F -w -n power-profiler power_profiler/power_profiler.py
+      - name: See dist directory
+        run: ls dist
+      - uses: actions/upload-artifact@master
+        with:
+          name: MacOS
+          path: dist/power-profiler.app
