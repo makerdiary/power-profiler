@@ -19,9 +19,10 @@ jobs:
           pip --version
       - name: Install requirements
         run: |
+          pip install -U setuptools wheel
           pip install pyserial PyQt5
           pip install git+https://github.com/pyqtgraph/pyqtgraph@develop
-          pip install pip install https://github.com/pyinstaller/pyinstaller/archive/develop.zip
+          pip install git+https://github.com/pyinstaller/pyinstaller@develop
       - name: Run PyInstaller
         run: |
           python -m PyInstaller -F -w -n power-profiler-x64 power_profiler/power_profiler.py
@@ -47,9 +48,10 @@ jobs:
           pip --version
       - name: Install requirements
         run: |
+          pip install -U setuptools wheel
           pip install pyserial PyQt5
           pip install git+https://github.com/pyqtgraph/pyqtgraph@develop
-          pip install pip install https://github.com/pyinstaller/pyinstaller/archive/develop.zip
+          pip install git+https://github.com/pyinstaller/pyinstaller@develop
       - name: Run PyInstaller
         run: |
           python -m PyInstaller -F -w -n power-profiler-x86 power_profiler/power_profiler.py
@@ -76,9 +78,10 @@ jobs:
           pip --version
       - name: Install requirements
         run: |
+          pip install -U setuptools wheel
           pip install pyserial PyQt5
           pip install git+https://github.com/pyqtgraph/pyqtgraph@develop
-          pip install pip install https://github.com/pyinstaller/pyinstaller/archive/develop.zip
+          pip install git+https://github.com/pyinstaller/pyinstaller@develop
       - name: Run PyInstaller
         run: |
           python -m PyInstaller -F -w -n power-profiler power_profiler/power_profiler.py
