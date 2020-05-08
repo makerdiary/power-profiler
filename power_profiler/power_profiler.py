@@ -417,7 +417,7 @@ class MainWindow(pg.QtGui.QMainWindow):
         self.widget.setYRange(r[1][0] + delta, r[1][1] + delta, padding=0)
 
     def showInfo(self):
-        pg.QtGui.QDesktopServices.openUrl(pg.QtCore.QUrl('https://github.com'))
+        pg.QtGui.QDesktopServices.openUrl(pg.QtCore.QUrl('https://github.com/makerdiary/power-profiler'))
 
     def pin(self, checked):
         if checked:
