@@ -14,7 +14,6 @@ Requirement:
 """
 
 import time
-# from datetime import datetime
 import traceback
 import sys
 import serial
@@ -24,14 +23,20 @@ import pyqtgraph as pg
 import pyqtgraph.exporters
 
 
-# using baudrate to configure voltmeter
-GAIN = 0    # select gain, 0: β=1.449, range: [5mA, 950mA] 1: β=119.52, range: [50uA, 11mA]
-DIV = 48    # min = 11, sample rate = 48 MHz / div / 2 / 11, each channel takes 11 clock, 2 channels
-baudrate = 0x40000000 | (DIV << 16) | (GAIN << 8)
-sample_rate = 48000000 / DIV / 2 / 11
-
-BETA = (1.449, 119.52)
 MAX_HISTORY = 1 << 20
+
+# I = 1.3524 * ADC / Gain (mA)
+# SEL=0, Gain=1.98, Rang: 0 - 690mA, Resolution: 5mA
+# SEL=1, Gain=119.52, Rang: 0 - 11mA, Resolution: 50uA
+GAIN_SELECT = 0
+SAMPLE_RATE = 60000     # Hz
+LOG2AVG     = 1
+
+# using baud rate to configure voltmeter
+BAUDRATE = 0x40000000 | (GAIN_SELECT << 29) | (7 << 26) | (LOG2AVG << 20) | int(SAMPLE_RATE)
+
+BETA = (1.3524 / 1.98, 1.3524 / 119.52)
+AVERAGE_N = (1 << LOG2AVG)
 
 
 class Probe(pg.QtCore.QThread):
@@ -43,12 +48,11 @@ class Probe(pg.QtCore.QThread):
         self.data = np.empty((4, 1 << 12))
         self.index = 0
         self.n = 0
-        self._gain = GAIN
+        self._gain = GAIN_SELECT
         self.queue = []
 
     def run(self):
         for p in list_ports.comports():
-            print(p)
             if p[2].upper().startswith('USB VID:PID=0D28:0204'):
                 port = p[0]
                 break
@@ -59,14 +63,11 @@ class Probe(pg.QtCore.QThread):
 
         print('Open {}'.format(port))
         device = serial.Serial(port=port,
-                               baudrate=baudrate,
+                               baudrate=BAUDRATE,
                                bytesize=8,
                                parity='N',
                                stopbits=1,
                                timeout=1)
-
-        # for _ in range(1024):
-        #     device.read(4)
 
         device.write(b's')  # stop
         time.sleep(1)
@@ -74,79 +75,96 @@ class Probe(pg.QtCore.QThread):
         device.write(str(self.gain).encode())
         device.write(b'g')  # go
 
+        n = AVERAGE_N
         bytes_count = 0
         samples_count = 0
         t1 = time.monotonic_ns()
 
-        # output = datetime.now().strftime('data-%Y%m%d-%H%M%S.csv')
-        output = 'data.csv'
-        with open(output, 'w') as f:
-            f.write('t,I,U\n')
-            while not self.done:
-                try:
-                    if self.queue:
-                        command = self.queue.pop(0)
-                        device.write(command)
-                        print('tx:{}'.format(command))
+        # output = 'data.csv'
+        # self.f = open(output, 'w')
+        # self.f.write('t,I,U\n')
+        
+        current_gain = self.gain
+        while not self.done:
+            try:
+                if self.queue:
+                    command = self.queue.pop(0)
+                    device.write(command)
+                    # print('tx:{}'.format(command))
                     current_gain = self.gain
-                    raw = device.read(4)
-                    current = (raw[3] << 2) | (raw[2] >> 6)
-                    current = current * 1.3524 / BETA[current_gain]
-                    voltage = ((raw[2] & 0x3F) << 4) | (raw[1] >> 4)
-                    n = ((raw[1] & 0xF) << 8) | raw[0]
-                except IOError:
-                    traceback.print_exc()
-                    self.error.emit(2)
-                    break
-                except ValueError:
-                    print(raw)
-                    traceback.print_exc()
+                raw = device.read(16)
+                if not raw:
+                    print('no data')
+                    continue
+                for i in range(0, 16, 2):
+                    channel = raw[i] & 0x3F
+                    if channel & 0x38:
+                        print('bad data')
+                        # device.read(1)
+                        continue
 
-                bytes_count += 4
-                samples_count += n
-                t2 = time.monotonic_ns()
-                dt = t2 - t1
-                # if samples_count >= sample_rate:
-                if dt >= 1000000000:
-                    t1 = t2
-                    print((bytes_count, samples_count, dt / 1000000))
-                    bytes_count = 0
-                    samples_count = 0
+                    current = (raw[i +1 ] << 2) | (raw[i] >> 6)
+                    current = current * BETA[current_gain]
+                    if current > 0:
+                        current -= 0.0165
+                    self.process(current, AVERAGE_N)
+                    
+            except IOError:
+                traceback.print_exc()
+                self.error.emit(2)
+                break
+            except ValueError:
+                print(raw)
+                traceback.print_exc()
+                break
 
-                if self.index & 0xFFF == 0:
-                    print([n, current, voltage])
+            bytes_count += 16
+            samples_count += n*8
+            t2 = time.monotonic_ns()
+            dt = t2 - t1
+            # if samples_count >= SAMPLE_RATE:
+            if dt >= 1000000000:
+                t1 = t2
+                print('data rate: {} bytes/s, samples: {}, dt: {}'.format(bytes_count, samples_count, dt / 1000000))
+                bytes_count = 0
+                samples_count = 0
 
-                def index_inc():
-                    self.index += 1
-                    if self.index < self.data.shape[1]:
-                        return
+        device.write(b'e')
+        device.close()
+        # np.savetxt(self.f, self.data[1:,:self.index].T, ['%d', '%f', '%d'], ',')
 
-                    if self.index < MAX_HISTORY:
-                        buffer = np.concatenate(
-                            (self.data, np.empty(self.data.shape)), axis=1)
-                        self.data = buffer
-                    else:
-                        half = MAX_HISTORY >> 1
-                        np.savetxt(f, self.data[1:,:half].T, ['%d', '%f', '%d'], ',')
-                        self.data[:,:half] = self.data[:,half:]
-                        self.index -= half
-                # when n > 1, `current` and `voltage` are the average of n samples
-                if n > 1:
-                    self.data[0][self.index] = (self.n + 1) / sample_rate
-                    self.data[1][self.index] = self.n + 1
-                    self.data[2][self.index] = current
-                    self.data[3][self.index] = voltage
-                    index_inc()
-                self.n += n
-                self.data[0][self.index] = self.n / sample_rate
-                self.data[1][self.index] = self.n
-                self.data[2][self.index] = current
-                self.data[3][self.index] = voltage
-                index_inc()
+    def process(self, current, n):
+        if self.index & 0xFFF == 0:
+            print(current)
 
-            device.write(b's')
-            device.close()
-            np.savetxt(f, self.data[1:,:self.index].T, ['%d', '%f', '%d'], ',')
+        def index_inc():
+            self.index += 1
+            if self.index < self.data.shape[1]:
+                return
+
+            if self.index < MAX_HISTORY:
+                buffer = np.concatenate(
+                    (self.data, np.empty(self.data.shape)), axis=1)
+                self.data = buffer
+            else:
+                half = MAX_HISTORY >> 1
+                # np.savetxt(self.f, self.data[1:,:half].T, ['%d', '%f', '%d'], ',')
+                self.data[:,:half] = self.data[:,half:]
+                self.index -= half
+
+        # when n > 1, `current` and `voltage` are the average of n samples
+        if n > 1:
+            self.data[0][self.index] = (self.n + 1) / SAMPLE_RATE
+            self.data[1][self.index] = self.n + 1
+            self.data[2][self.index] = current
+            # self.data[3][self.index] = voltage
+            index_inc()
+        self.n += n
+        self.data[0][self.index] = self.n / SAMPLE_RATE
+        self.data[1][self.index] = self.n
+        self.data[2][self.index] = current
+        # self.data[3][self.index] = voltage
+        index_inc()
 
     def get(self):
         return self.data, self.index
@@ -181,15 +199,15 @@ class MainWindow(pg.QtGui.QMainWindow):
         self.widget.setLabel('left', 'I')
         self.widget.setLabel('bottom', 't/s')
         self.widget.showButtons()
-        self.widget.setXRange(0, 10.0)
-        self.widget.setYRange(0, 4)
+        self.widget.setXRange(0, 10., padding=0)
+        self.widget.setYRange(0, 10., padding=0)
         # self.widget.setLimits(minYRange=0, maxYRange=1024, yMin=0, yMax=1024)
         self.widget.setMouseEnabled(True, False)
         # self.widget.setAutoPan(x=True)
         # self.widget.enableAutoRange(x=True)
-        line = pg.InfiniteLine(
-            pos=512, angle=0, movable=True, bounds=[0, 1024])
-        self.widget.addItem(line)
+        # line = pg.InfiniteLine(
+        #     pos=512, angle=0, movable=True, bounds=[0, 1024])
+        # self.widget.addItem(line)
         self.widget.showGrid(x=True, y=True, alpha=0.5)
         self.plot = self.widget.plot()
         self.plot.setPen((0, 255, 0))
@@ -222,12 +240,20 @@ class MainWindow(pg.QtGui.QMainWindow):
 
         # 🍳β🧐
         gainAction = pg.QtGui.QAction('🧐', self)
-        gainAction.setToolTip('Increase Gain (.)')
+        gainAction.setToolTip('Change Gain (.)')
         gainAction.setShortcut('.')
         gainAction.setCheckable(True)
         gainAction.setChecked(False)
-        gainAction.toggled.connect(self.increaseGain)
+        gainAction.toggled.connect(self.set_gain)
         self.toolbar.addAction(gainAction)
+
+        autoAction = pg.QtGui.QAction('A', self)
+        autoAction.setToolTip('Auto-Adjust (a)')
+        autoAction.setShortcut('a')
+        # autoAction.setCheckable(True)
+        autoAction.setChecked(False)
+        autoAction.triggered.connect(self.adjust)
+        self.toolbar.addAction(autoAction)
     
         # # 🔍🔎
         # xZoomInAction = pg.QtGui.QAction('🔍⇆', self)
@@ -325,6 +351,7 @@ class MainWindow(pg.QtGui.QMainWindow):
             "QToolButton {color: rgb(0,255,0)}"
             "QToolBar {background: rgb(30,30,30); border: none}")
 
+        self.auto_range = True
         self.freezed = False
         self.probe = Probe()
         self.probe.error.connect(self.handle_error)
@@ -341,6 +368,18 @@ class MainWindow(pg.QtGui.QMainWindow):
             data, size = self.probe.get()
             n = data[0][size-1]
             if n >= r[0][1]:
+                if self.auto_range:
+                    start = np.max(size - int(SAMPLE_RATE * (n - r[0][0])), 0)
+                    ymax = np.max(data[2][start:size])
+                    ymin = np.min(data[2][start:size])
+
+                    if ymax < r[1][1]:
+                        ymax = r[1][1]
+                    if ymin > r[1][0]:
+                        ymin = r[1][0]
+        
+                    self.widget.setYRange(ymin, ymax, padding=0)
+
                 self.widget.setXRange(n, n + r[0][1] - r[0][0], padding=0)
             self.plot.setData(data[0][:size], data[2][:size])
 
@@ -359,8 +398,18 @@ class MainWindow(pg.QtGui.QMainWindow):
     def freeze(self, checked):
         self.freezed = checked
 
-    def increaseGain(self, checked):
+    def set_gain(self, checked):
         self.probe.gain = 1 if checked else 0
+
+    def adjust(self):
+        r = self.widget.viewRange()
+        data = self.plot.getData()
+        # print((r, data))
+        start = -int(SAMPLE_RATE * (data[0][-1] - r[0][0]))
+        ymax = np.max(data[1][start:])
+        ymin = np.min(data[1][start:])
+        
+        self.widget.setYRange(ymin, ymax, padding=0)
 
     def save(self):
         dialog = pg.widgets.FileDialog.FileDialog(self)
