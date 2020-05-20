@@ -29,8 +29,8 @@ MAX_HISTORY = 1 << 20
 # SEL=0, Gain=1.98, Rang: 0 - 690mA, Resolution: 5mA
 # SEL=1, Gain=119.52, Rang: 0 - 11mA, Resolution: 50uA
 GAIN_SELECT = 0
-SAMPLE_RATE = 60000     # Hz
-LOG2AVG     = 1
+SAMPLE_RATE = 128000     # Hz
+LOG2AVG     = 4
 
 # using baud rate to configure voltmeter
 BAUDRATE = 0x40000000 | (GAIN_SELECT << 29) | (7 << 26) | (LOG2AVG << 20) | int(SAMPLE_RATE)
