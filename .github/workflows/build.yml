@@ -1,6 +1,9 @@
-name: Build Workflow
+name: Use PyInstaller to bundle the application
 
-on: [push, pull_request]
+on:
+  push:
+    tags:
+    - 'pre-*'
 
 jobs:
   build-windows:

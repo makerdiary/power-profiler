@@ -1,4 +1,4 @@
-name: Upload Python Package and Release Asset
+name: release
 
 on:
   push:
