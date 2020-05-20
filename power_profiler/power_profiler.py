@@ -364,8 +364,10 @@ class MainWindow(pg.QtGui.QMainWindow):
 
     def update(self):
         if not (self.freezed or self.probe.done):
-            r = self.widget.viewRange()
             data, size = self.probe.get()
+            if size == 0:
+                return
+            r = self.widget.viewRange()
             n = data[0][size-1]
             if n >= r[0][1]:
                 if self.auto_range:
