@@ -45,7 +45,7 @@ class Probe(pg.QtCore.QThread):
     def __init__(self):
         super().__init__()
         self.done = False
-        self.data = np.empty((4, 1 << 12))
+        self.data = np.empty((3, 1 << 12))
         self.index = 0
         self.n = 0
         self._gain = GAIN_SELECT
