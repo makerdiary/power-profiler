@@ -78,7 +78,7 @@ class Probe(pg.QtCore.QThread):
         n = AVERAGE_N
         bytes_count = 0
         samples_count = 0
-        t1 = time.monotonic_ns()
+        t1 = time.time()
 
         # output = 'data.csv'
         # self.f = open(output, 'w')
@@ -120,10 +120,10 @@ class Probe(pg.QtCore.QThread):
 
             bytes_count += 16
             samples_count += n*8
-            t2 = time.monotonic_ns()
+            t2 = time.time()
             dt = t2 - t1
             # if samples_count >= SAMPLE_RATE:
-            if dt >= 1000000000:
+            if dt >= 1.:
                 t1 = t2
                 print('data rate: {} bytes/s, samples: {}, dt: {}'.format(bytes_count, samples_count, dt / 1000000))
                 bytes_count = 0
