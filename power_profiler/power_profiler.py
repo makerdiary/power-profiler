@@ -371,7 +371,7 @@ class MainWindow(pg.QtGui.QMainWindow):
             n = data[0][size-1]
             if n >= r[0][1]:
                 if self.auto_range:
-                    start = np.max(size - int(SAMPLE_RATE * (n - r[0][0])), 0)
+                    start = np.max((size - int(SAMPLE_RATE * (n - r[0][0])), 0))
                     ymax = np.max(data[2][start:size])
                     ymin = np.min(data[2][start:size])
 
