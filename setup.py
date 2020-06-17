@@ -6,13 +6,13 @@ from setuptools import setup
 with open('README.md') as f:
     long_description = f.read()
 
-requirements = ['pyserial']
+requirements = ['pyserial', 'pyqtgraph>=0.11.0']
 
 setup_requirements = ['wheel']
 
 
 setup(name='power-profiler',
-      version='0.2.0',
+      version='0.3.0',
       description='A power profiling tool',
       long_description=long_description,
       long_description_content_type='text/markdown',
