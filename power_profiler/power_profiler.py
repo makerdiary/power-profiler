@@ -200,7 +200,7 @@ class MainWindow(pg.QtGui.QMainWindow):
         self.widget.setLabel('bottom', 't/s')
         self.widget.showButtons()
         self.widget.setXRange(0, 10., padding=0)
-        self.widget.setYRange(0, 10., padding=0)
+        self.widget.setYRange(0, 50., padding=0)
         # self.widget.setLimits(minYRange=0, maxYRange=1024, yMin=0, yMax=1024)
         self.widget.setMouseEnabled(True, False)
         # self.widget.setAutoPan(x=True)
@@ -246,6 +246,8 @@ class MainWindow(pg.QtGui.QMainWindow):
         gainAction.setChecked(False)
         gainAction.toggled.connect(self.set_gain)
         self.toolbar.addAction(gainAction)
+
+        self.gainAction = gainAction
 
         autoAction = pg.QtGui.QAction('A', self)
         autoAction.setToolTip('Auto-Adjust (a)')
@@ -370,19 +372,13 @@ class MainWindow(pg.QtGui.QMainWindow):
             r = self.widget.viewRange()
             n = data[0][size-1]
             if n >= r[0][1]:
-                if self.auto_range:
-                    start = np.max((size - int(SAMPLE_RATE * (n - r[0][0])), 0))
-                    ymax = np.max(data[2][start:size])
-                    ymin = np.min(data[2][start:size])
-
-                    if ymax < r[1][1]:
-                        ymax = r[1][1]
-                    if ymin > r[1][0]:
-                        ymin = r[1][0]
-        
-                    self.widget.setYRange(ymin, ymax, padding=0)
-
                 self.widget.setXRange(n, n + r[0][1] - r[0][0], padding=0)
+                start = np.max((size - int(SAMPLE_RATE * (n - r[0][0])), 0))
+                if np.average(data[2][start:size]) > 11 and self.probe.gain == 1:
+                    self.gainAction.setChecked(False)
+                elif np.max(data[2][start:size]) < 11 and self.probe.gain == 0:
+                    self.gainAction.setChecked(True)
+
             self.plot.setData(data[0][:size], data[2][:size])
 
     def closeEvent(self, event):
@@ -407,11 +403,13 @@ class MainWindow(pg.QtGui.QMainWindow):
         r = self.widget.viewRange()
         data = self.plot.getData()
         # print((r, data))
-        start = -int(SAMPLE_RATE * (data[0][-1] - r[0][0]))
+        start = -(int(SAMPLE_RATE * (data[0][-1] - r[0][0])) >> LOG2AVG)
         ymax = np.max(data[1][start:])
         ymin = np.min(data[1][start:])
+        print((ymax, ymin))
+        ymax *= 1.2
         
-        self.widget.setYRange(ymin, ymax, padding=0)
+        self.widget.setYRange(0, ymax, padding=0)
 
     def save(self):
         dialog = pg.widgets.FileDialog.FileDialog(self)
